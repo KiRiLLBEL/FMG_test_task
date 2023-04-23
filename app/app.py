@@ -1,56 +1,83 @@
-from fastapi import FastAPI, Body, status
+from fastapi import FastAPI, Body, status, HTTPException
 from fastapi.responses import JSONResponse, FileResponse
-import asyncio
+import subprocess
 
 
-class Process(object):
-    @classmethod
-    async def create(cls, name: str):
-        self = Process()
-        self.name = name
-        cmd = f"./{name}"
-        self.proc = await asyncio.create_subprocess_shell(
-            cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE)
-        self.stack = []
-        return self
+class SingletonMeta(type):
+    _instances = {}
 
-    async def read(self) -> str:
-        return await self.proc.stdout.read()
+    def __call__(cls, *args, **kwargs):
+        if cls not in cls._instances:
+            instance = super().__call__(*args, **kwargs)
+            cls._instances[cls] = instance
+        return cls._instances[cls]
+
+
+class Process(metaclass=SingletonMeta):
+    def __init__(self) -> None:
+        self.proc = None
+
+    def create(self):
+        cmd = "./main"
+        self.log = open("main.log", mode='w')
+        try:
+            self.proc = subprocess.Popen(cmd, stdout=self.log, stderr=self.log)
+        except OSError as e:
+            raise HTTPException(status_code=404, detail=e.strerror)
+
+    def read(self) -> str:
+        with open("main.log", "r") as f:
+            return f.read()
 
     def exit(self):
+        self.log.close()
         self.proc.kill()
+
+    def started(self) -> bool:
+        return self.proc is not None
+
+    def active(self) -> bool:
+        if self.started():
+            if self.proc.poll() is None:
+                return True
+            else: 
+                return False
+        else:
+            return False
 
 
 app = FastAPI()
 
-proc_db = {str: Process}
-
-
-@app.post("/{proc_name}")
-async def createProcess(proc_name: str, cmd: str):
+P = Process()
+@app.post("/main")
+def createProcess(cmd: str):
     if (cmd == 'start'):
-        if proc_name not in proc_db:
-            p = await Process.create(proc_name)
+        if P.active():
+            return {'status': 'Already started'}
         else:
-            return {'status': "Already created"}
-        proc_db[proc_name] = p
-        return {'status': "Success"}
+            P.create()
+            return {'status': 'Success'}
     elif (cmd == 'stop'):
-        if proc_name in proc_db:
-            proc_db[proc_name].exit()
-            proc_db.pop(proc_name)
-            return {'status': "Success"}
+        if P.active():
+            P.exit()
+            return {'status': 'Success'}
         else:
-            return {'status': "Process not created"}
+            return {'status': 'Already stopped'}
     else:
-        return {'status': "Fail"}
+        raise HTTPException(status_code=404, detail="Command not found")
 
 
-@app.get("/{proc_name}/result")
-async def getResult(proc_name: str):
-    if proc_name in proc_db:
-        return {'result': await proc_db[proc_name].proc.stdout.readline()}
+@app.get("/main/result")
+def getResult():
+    if not P.started():
+        raise HTTPException(status_code=404, detail="Not found")
     else:
-        return {'result': "Process not created"}
+        return P.read()
+
+
+@app.get("/main")
+def getStatus():
+    if P.active():
+        return {'status': 'Active'}
+    else:
+        return {'status': 'Stopped'}

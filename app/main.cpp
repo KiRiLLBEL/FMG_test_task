@@ -12,8 +12,9 @@ int main() {
     for(int i = 0; i < 10; ++i) {
         std::this_thread::sleep_for(std::chrono::milliseconds(10000));
         for(int v: arr) {
-            std::cout << v << " ";
+            std::cout << v + i << " ";
         }
+        std::cout << "\n";
     }
     return 0;
 }
