@@ -20,7 +20,7 @@ class Process(metaclass=SingletonMeta):
 
     def create(self):
         cmd = "./src/main"
-        self.log = open("main_close.log", mode='w')
+        self.log = open("src/main_close.log", mode='w')
         try:
             self.proc = subprocess.Popen(cmd, stdout=self.log, stderr=self.log)
         except OSError as e:
@@ -28,8 +28,8 @@ class Process(metaclass=SingletonMeta):
 
     def read(self) -> str:
         if not P.active():
-            os.system("cat main_close.log > main.log")
-        with open("main.log", "r") as f:
+            os.system("cat src/main_close.log > src/main.log")
+        with open("src/main.log", "r") as f:
             return f.read()
 
     def exit(self):
